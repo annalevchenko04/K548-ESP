@@ -10,6 +10,7 @@ import Main from "./components/Main";
 import Calculator from './components/Calculator';
 import Analytics from './components/Analytics';
 import Explore from './components/Explore';
+import { Link } from "react-router-dom";
 import './styles.css';
 
 

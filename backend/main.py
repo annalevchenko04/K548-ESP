@@ -10,14 +10,16 @@ from datetime import datetime, timedelta, timezone
 from passlib.context import CryptContext
 from database import engine, SessionLocal
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Annotated, List
+from typing import Annotated, List, Dict
 from dotenv import load_dotenv
+from pydantic import BaseModel
 
 load_dotenv()
 
 app = FastAPI()
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
 
 origins = [
     "http://localhost:3000",
@@ -52,6 +54,82 @@ REFRESH_TOKEN_EXPIRE_DAYS = 10
 
 db_dependency = Annotated[Session, Depends(get_db)]
 
+
+
+# Emission factors from the image
+emission_factors = {
+    "car": 0.1949,
+    "motorbike": 0.11662,
+    "train": 0.04678,
+    "bus": 0.12259,
+    "flight_economy": 0.08378,
+    "flight_business": 0.12565,
+    "taxi": 0.21863,
+    "email": 0.004,
+    "email_attachment": 0.05,
+    "spam_email": 0.00003,
+    "sms": 0.000014,
+    "call": 0.19,
+    "water": 1.052,
+    "electricity": 0.39,
+    "heating": 0.215,
+    "gas": 2.09672,
+    "petrol_car": 0.1949,
+    "diesel_car": 0.171,
+    "cng_car": 0.165,
+    "paper_waste": 0.5,
+    "plastic_waste": 1.5,
+    "glass_waste": 0.2,
+    "general_waste": 2.0
+}
+
+
+class CarbonFootprintRequest(BaseModel):
+    answers: Dict[str, str | float]
+
+
+@app.post("/calculate")
+def calculate_footprint(data: CarbonFootprintRequest):
+    print("Received data:", data.answers)
+    try:
+        formatted_answers = {}
+        category_breakdown = {}
+
+        # Updated Parsing Logic for Ranges and Manual Inputs
+        for key, value in data.answers.items():
+            if isinstance(value, str):
+                if '-' in value:
+                    low, high = map(float, value.replace(" km", "").replace(" kWh", "").replace(" m³", "").split('-'))
+                    formatted_answers[key] = (low + high) / 2
+                elif value.replace(".", "", 1).isdigit():
+                    formatted_answers[key] = float(value)
+                else:
+                    formatted_answers[key] = 0
+            else:
+                formatted_answers[key] = float(value)
+
+        # Updated Emission Factor Mapping
+        mapping_corrections = {
+            "petrol_car": "car",
+            "diesel_car": "car",
+            "cng_car": "car",
+            "flight_first_class": "flight_business"
+        }
+
+        total_footprint = 0
+        for q, amount in formatted_answers.items():
+            key = mapping_corrections.get(q, q)  # Map corrected keys
+            emission = amount * emission_factors.get(key, 0)
+            category_breakdown[q] = emission
+            total_footprint += emission
+
+        return {
+            "total_carbon_footprint_kg": round(total_footprint, 2),
+            "category_breakdown": category_breakdown
+        }
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid input: {e}")
 
 @app.get("/user/{username}", response_model=schemas.UserResponse, tags=["Users"])
 async def get_user_by_username(username: str, db: db_dependency):
@@ -113,12 +191,11 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 def verify_token(token: str = Depends(oauth2_scheme)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("username")
-        if username is None:
+        if not payload or "username" not in payload:
             raise HTTPException(status_code=403, detail="Token is invalid")
         return payload
     except JWTError:
-        raise HTTPException(status_code=403, detail="Token is invalid")
+        raise HTTPException(status_code=403, detail="Token has expired or is invalid")
 
 
 @app.get("/verify-token/{token}", tags=["Users"])
