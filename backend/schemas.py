@@ -1,5 +1,5 @@
-from typing import Optional
 from pydantic import BaseModel, EmailStr
+from typing import Dict, List, Optional
 
 
 class UserCreate(BaseModel):
@@ -36,3 +36,15 @@ class UserResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+
+class Question(BaseModel):
+    id: str
+    text: str
+    unit: str
+    type: str  # "range", "single_value", "dropdown", etc.
+    options: Optional[List[str]] = None
+    default_value: Optional[float] = None
+
+class CarbonFootprintRequest(BaseModel):
+    answers: Dict[str, str | float]

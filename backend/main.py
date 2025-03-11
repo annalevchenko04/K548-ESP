@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import Annotated, List, Dict
 from dotenv import load_dotenv
 from pydantic import BaseModel
+from calculator import calculate_footprint
 
 load_dotenv()
 
@@ -54,7 +55,12 @@ REFRESH_TOKEN_EXPIRE_DAYS = 10
 
 db_dependency = Annotated[Session, Depends(get_db)]
 
-
+default_values = {
+    "petrol_car": 200,       # km/month (EU average)
+    "diesel_car": 180,
+    "electricity": 300,      # kWh/month
+    "water_usage": 10,       # cubic meters/month
+}
 
 # Emission factors from the image
 emission_factors = {
@@ -63,14 +69,14 @@ emission_factors = {
     "train": 0.04678,
     "bus": 0.12259,
     "flight_economy": 0.08378,
-    "flight_business": 0.12565,
+    "flight_first_class": 0.12565,
     "taxi": 0.21863,
-    "email": 0.004,
-    "email_attachment": 0.05,
-    "spam_email": 0.00003,
+    "emails": 0.004,
+    "emails_with_attachments": 0.05,
+    "spam_emails": 0.00003,
     "sms": 0.000014,
-    "call": 0.19,
-    "water": 1.052,
+    "phone_calls": 0.19,
+    "water_usage": 1.052,
     "electricity": 0.39,
     "heating": 0.215,
     "gas": 2.09672,
@@ -83,54 +89,37 @@ emission_factors = {
     "general_waste": 2.0
 }
 
+mapping_corrections = {
+    "petrol_car": "car",
+    "diesel_car": "car",
+    "cng_car": "car",
+    "flight_economy": "flight_economy",
+    "flight_first_class": "flight_first_class"
+}
 
 class CarbonFootprintRequest(BaseModel):
     answers: Dict[str, str | float]
 
 
-@app.post("/calculate")
-def calculate_footprint(data: CarbonFootprintRequest):
-    print("Received data:", data.answers)
+@app.post("/footprint")
+def calculate_footprint_api(data: CarbonFootprintRequest, db: Session = Depends(get_db)):
     try:
-        formatted_answers = {}
-        category_breakdown = {}
-
-        # Updated Parsing Logic for Ranges and Manual Inputs
-        for key, value in data.answers.items():
-            if isinstance(value, str):
-                if '-' in value:
-                    low, high = map(float, value.replace(" km", "").replace(" kWh", "").replace(" m³", "").split('-'))
-                    formatted_answers[key] = (low + high) / 2
-                elif value.replace(".", "", 1).isdigit():
-                    formatted_answers[key] = float(value)
-                else:
-                    formatted_answers[key] = 0
-            else:
-                formatted_answers[key] = float(value)
-
-        # Updated Emission Factor Mapping
-        mapping_corrections = {
-            "petrol_car": "car",
-            "diesel_car": "car",
-            "cng_car": "car",
-            "flight_first_class": "flight_business"
-        }
-
-        total_footprint = 0
-        for q, amount in formatted_answers.items():
-            key = mapping_corrections.get(q, q)  # Map corrected keys
-            emission = amount * emission_factors.get(key, 0)
-            category_breakdown[q] = emission
-            total_footprint += emission
-
+        result = calculate_footprint(data.answers)
         return {
-            "total_carbon_footprint_kg": round(total_footprint, 2),
-            "category_breakdown": category_breakdown
+            "total_carbon_footprint_kg": result['total_carbon_footprint_kg'],
+            "category_breakdown": result['category_breakdown'],
+            "comparison": {
+                "average_eu": 11.3,
+                "target_2030": 5.0
+            },
+            "recommendations": [
+                "Reduce short taxi trips by walking or cycling.",
+                "Switch to energy-efficient appliances to reduce electricity use.",
+                "Adopt a plant-based diet to significantly reduce food emissions."
+            ]
         }
-
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid input: {e}")
-
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error calculating footprint: {str(e)}")
 @app.get("/user/{username}", response_model=schemas.UserResponse, tags=["Users"])
 async def get_user_by_username(username: str, db: db_dependency):
     db_user = crud.get_user(db=db, username=username)

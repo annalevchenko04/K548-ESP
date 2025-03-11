@@ -1,119 +1,130 @@
 import React, { useState, useContext } from "react";
 import axios from "axios";
 import { UserContext } from "../context/UserContext";
+import { questions } from "../context/questions";  // Corrected Import Path
 
 const Calculator = () => {
-  const { user } = useContext(UserContext);
-  const [answers, setAnswers] = useState({});
-  const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [manualInput, setManualInput] = useState("");
-  const [result, setResult] = useState(null);
-  const [detailedResults, setDetailedResults] = useState(null);
+    const { user } = useContext(UserContext);
+    const [answers, setAnswers] = useState({});
+    const [result, setResult] = useState(null);
+    const [detailedResults, setDetailedResults] = useState(null);
 
-  const questions = [
-    // IT Usage
-    { id: "phone_calls", text: "How many phone calls do you make per month?", options: ["0", "1-50", "51-100", "101-200", "Enter manually"] },
-    { id: "sms", text: "How many SMS do you send per month?", options: ["0", "1-50", "51-100", "101-200", "Enter manually"] },
-    { id: "emails", text: "How many emails do you send per month?", options: ["0", "1-50", "51-100", "101-200", "Enter manually"] },
-    { id: "spam_emails", text: "How many spam emails do you receive per month?", options: ["0", "1-100", "101-500", "501-1000", "Enter manually"] },
-    { id: "emails_with_attachments", text: "How many emails with attachments do you send per month?", options: ["0", "1-50", "51-100", "101-200", "Enter manually"] },
+    const handleAnswerChange = (questionId, value) => {
+        setAnswers((prev) => ({
+            ...prev,
+            [questionId]: value
+        }));
+    };
 
-    // Water Consumption
-    { id: "water_usage", text: "How much water do you use per month (in cubic meters)?", options: ["0-5", "6-10", "11-15", "16-20", "Enter manually"] },
+    const handleSubmit = async () => {
+        try {
+            const formattedAnswers = Object.fromEntries(
+                Object.entries(answers).map(([key, value]) => {
+                    if (value.includes("-")) {
+                        const [low, high] = value.split("-").map(Number);
+                        return [key, (low + high) / 2];
+                    }
+                    return [key, isNaN(value) ? value : Number(value)];
+                })
+            );
 
-    // Business Travel
-    { id: "flight_economy", text: "How far do you travel for business by economy class flights per month(in kilometers)?", options: ["0 km", "1-500 km", "501-1000 km", "1001-5000 km", "Enter manually"] },
-    { id: "flight_first_class", text: "How far do you travel for business by first class flights per month(in kilometers)?", options: ["0 km", "1-500 km", "501-1000 km", "1001-5000 km", "Enter manually"] },
-    { id: "taxi", text: "How far do you travel by taxi per month(in kilometers)?", options: ["0 km", "1-50 km", "51-100 km", "101-200 km", "Enter manually"] },
+            const response = await axios.post("http://127.0.0.1:8000/footprint", {
+                answers: formattedAnswers
+            });
 
-    // Transportation
-    { id: "petrol_car", text: "How far do you drive a petrol car per month(in kilometers)?", options: ["0 km", "1-200 km", "201-500 km", "501-1000 km", "Enter manually"] },
-    { id: "diesel_car", text: "How far do you drive a diesel car per month(in kilometers)?", options: ["0 km", "1-200 km", "201-500 km", "501-1000 km", "Enter manually"] },
-    { id: "cng_car", text: "How far do you drive a CNG car per month(in kilometers)?", options: ["0 km", "1-200 km", "201-500 km", "501-1000 km", "Enter manually"] },
-    { id: "motorbike", text: "How far do you travel by motorbike per month(in kilometers)?", options: ["0 km", "1-200 km", "201-500 km", "501-1000 km", "Enter manually"] },
-    { id: "train", text: "How far do you travel by train per month(in kilometers)?", options: ["0 km", "1-200 km", "201-500 km", "501-1000 km", "Enter manually"] },
-    { id: "bus", text: "How far do you travel by bus per month(in kilometers)?", options: ["0 km", "1-200 km", "201-500 km", "501-1000 km", "Enter manually"] },
+            const enrichedResults = Object.entries(response.data.category_breakdown).map(([category, emission]) => {
+                const matchedQuestion = questions.find((q) => q.id === category);
+                const displayText = matchedQuestion
+                    ? `${matchedQuestion.text} (${matchedQuestion.unit})`
+                    : category.replace(/_/g, " "); // Handle unmatched categories
+                return {
+                    id: category,
+                    text: displayText,
+                    emission: emission.toFixed(2)
+                };
+            });
 
-    // Energy Consumption
-    { id: "electricity", text: "How much electricity do you use per month(in KiloWatt per hour)?", options: ["0-100 kWh", "101-300 kWh", "301-600 kWh", "Enter manually"] },
-    { id: "heating", text: "How much heating energy do you use per month(in KiloWatt per hour)?", options: ["0-100 kWh", "101-300 kWh", "301-600 kWh", "Enter manually"] },
-    { id: "gas", text: "How much gas do you use per month(in cubic meters)?", options: ["0-5 m³", "6-10 m³", "11-20 m³", "Enter manually"] },
+            setResult(response.data.total_carbon_footprint_kg);
+            setDetailedResults(enrichedResults);
 
-    // Waste Production
-    { id: "paper_waste", text: "How much paper waste do you generate per month(in kilograms)?", options: ["0-5 kg", "6-10 kg", "11-20 kg", "Enter manually"] },
-    { id: "plastic_waste", text: "How much plastic waste do you generate per month(in kilograms)?", options: ["0-5 kg", "6-10 kg", "11-20 kg", "Enter manually"] },
-    { id: "glass_waste", text: "How much glass waste do you generate per month(in kilograms)?", options: ["0-5 kg", "6-10 kg", "11-20 kg", "Enter manually"] },
-    { id: "general_waste", text: "How much general waste do you generate per month(in kilograms)?", options: ["0-5 kg", "6-20 kg", "21-50 kg", "Enter manually"] },
-  ];
+        } catch (error) {
+            alert("Error calculating footprint. Please try again.");
+        }
+    };
 
-const handleAnswerChange = (questionId, value) => {
-    setAnswers((prev) => ({
-      ...prev,
-      [questionId]: value === "Enter manually" ? manualInput : value
-    }));
-  };
+    const groupedQuestions = questions.reduce((acc, question) => {
+        if (!acc[question.category]) {
+            acc[question.category] = [];
+        }
+        acc[question.category].push(question);
+        return acc;
+    }, {});
 
-  const handleManualInput = (e) => {
-    setManualInput(e.target.value);
-  };
-
-  const handleSubmit = async () => {
-    try {
-      const formattedAnswers = Object.fromEntries(
-        Object.entries(answers).map(([key, value]) => {
-          if (value.includes("-")) {
-            const [low, high] = value.split("-").map(Number);
-            return [key, (low + high) / 2];  // Average value for ranges
-          }
-          return [key, isNaN(value) ? value : Number(value)];
-        })
-      );
-
-      const response = await axios.post("http://127.0.0.1:8000/calculate", {
-        answers: formattedAnswers
-      });
-
-      setResult(response.data.total_carbon_footprint_kg);
-      setDetailedResults(response.data.category_breakdown);
-
-    } catch (error) {
-      console.error("Error calculating footprint:", error);
-      alert("There was an error calculating the footprint. Please try again.");
-    }
-  };
-
-  return (
-    <div>
-      <h1>Footprint Calculator</h1>
-      {questions.map((question) => (
-        <div key={question.id}>
-          <h4>{question.text}</h4>
-          <input
-            type="text"
-            placeholder="Enter a value"
-            value={answers[question.id] || ""}
-            onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-          />
-        </div>
-      ))}
-      <button onClick={handleSubmit}>Calculate</button>
-
-      {result !== null && (
+    return (
         <div>
-          <h3>Total Carbon Footprint: {result} kg CO₂/month</h3>
-          <h4>Breakdown:</h4>
-          <ul>
-            {detailedResults &&
-              Object.entries(detailedResults).map(([category, emission]) => (
-                <li key={category}>
-                  {category}: {emission.toFixed(2)} kg CO₂
-                </li>
-              ))}
-          </ul>
+            <h1>Footprint Calculator</h1>
+
+            {/* Render grouped questions with category headers */}
+            {Object.entries(groupedQuestions).map(([category, categoryQuestions]) => (
+                <div key={category} style={{ marginBottom: "20px" }}>
+                    <h3 style={{ textTransform: "capitalize", fontWeight: "bold", marginBottom: "10px" }}>
+                        {category.replace("_", " ")}
+                    </h3>
+                    {categoryQuestions.map((question) => (
+                        <div key={question.id} style={{ marginBottom: "10px" }}>
+                            <label htmlFor={question.id}>
+                                {question.text} — <span style={{ fontWeight: "bold" }}>{question.id}</span> ({question.unit})
+                            </label>
+                            <input
+                                type="text"
+                                id={question.id}
+                                placeholder={`Enter ${question.unit}`}
+                                value={answers[question.id] || ""}
+                                onChange={(e) => handleAnswerChange(question.id, e.target.value)}
+                                style={{
+                                    width: "100%",
+                                    padding: "8px",
+                                    marginTop: "4px",
+                                    borderRadius: "5px",
+                                    border: "1px solid #ccc"
+                                }}
+                            />
+                        </div>
+                    ))}
+                </div>
+            ))}
+
+            <button
+                onClick={handleSubmit}
+                style={{
+                    backgroundColor: "#4CAF50",
+                    color: "white",
+                    padding: "10px 20px",
+                    border: "none",
+                    borderRadius: "5px",
+                    cursor: "pointer",
+                    marginTop: "20px"
+                }}
+            >
+                Calculate
+            </button>
+
+            {result !== null && (
+                <div>
+                    <h3>Total Carbon Footprint: {result} kg CO₂/month</h3>
+                    <h4>Breakdown:</h4>
+                    <ul>
+                        {detailedResults &&
+                            detailedResults.map(({ id, text, emission }) => (
+                                <li key={id}>
+                                    {text} — {emission} kg CO₂
+                                </li>
+                            ))}
+                    </ul>
+                </div>
+            )}
         </div>
-      )}
-    </div>
-  );
+    );
 };
 
 export default Calculator;

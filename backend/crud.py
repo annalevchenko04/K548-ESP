@@ -1,6 +1,7 @@
 from typing import Any
 
 from fastapi import HTTPException
+from pydantic import json
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
 import models
@@ -195,3 +196,14 @@ def get_users(db: Session):
             raise ValueError(f"Unknown user role for user ID {user.id}")
         user_responses.append(user_response)
     return user_responses
+
+def save_carbon_footprint(db: Session, user_id: int, total_footprint: float, details: dict):
+    footprint_entry = models.CarbonFootprint(
+        user_id=user_id,
+        total_footprint=total_footprint,
+        details=json.dumps(details)
+    )
+    db.add(footprint_entry)
+    db.commit()
+    db.refresh(footprint_entry)
+    return footprint_entry

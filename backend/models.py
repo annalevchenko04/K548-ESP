@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, CheckConstraint, ForeignKey, Float
+from sqlalchemy import Column, Integer, String, CheckConstraint, ForeignKey, Float, func, DateTime
 from sqlalchemy.orm import validates
 from database import Base
 
@@ -60,4 +60,20 @@ class Admin(User):
     __mapper_args__ = {
         'polymorphic_identity': 'admin',
     }
+
+class CarbonFootprint(Base):
+    __tablename__ = "carbon_footprint"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    total_footprint = Column(Float, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+class CarbonFootprintDetails(Base):
+    __tablename__ = "carbon_footprint_details"
+
+    id = Column(Integer, primary_key=True, index=True)
+    footprint_id = Column(Integer, ForeignKey("carbon_footprint.id"))
+    category = Column(String, nullable=False)
+    value = Column(Float, nullable=False)
 

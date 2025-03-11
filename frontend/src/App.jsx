@@ -101,15 +101,14 @@ const App = () => {
                                         <span><strong>My Profile</strong></span>
                                     </span>
                                         </a>
-
-                                        <a className="navbar-item" href="/footprint">
-                                    <span className="icon-text">
-                                        <span className="icon">
-                                            <i className="fas fa-calculator"></i>
-                                        </span>
-                                        <span><strong>Footprint Calculator</strong></span>
-                                    </span>
-                                        </a>
+                                        <Link className="navbar-item" to="/footprint">
+                                            <span className="icon-text">
+                                                <span className="icon">
+                                                    <i className="fas fa-calculator"></i>
+                                                </span>
+                                                <span><strong>Footprint Calculator</strong></span>
+                                            </span>
+                                        </Link>
 
                                         <a className="navbar-item" href="/analytics">
                                     <span className="icon-text">
